@@ -249,9 +249,9 @@ int GPIO_CORE::filter( uint16_t an ){
          if(An_Filter == 1){ sig = Filter_a*sig + (1.0-Filter_a)*an; an = sig; }
     else if(An_Filter == 2){
       if( Dig_Filter == 0 ) an = map(an,AN_MIN,AN_MAX,0,db_states-1);
-      Serial.println("AN_MIN: " + String(AN_MIN));
-      Serial.println("AN_MAX: " + String(AN_MAX));
-      Serial.println("AN: " + String(an));
+      //Serial.println("AN_MIN: " + String(AN_MIN));
+      //Serial.println("AN_MAX: " + String(AN_MAX));
+      //Serial.println("AN: " + String(an));
 
       Change = false;
       Fall   = false;
@@ -259,9 +259,13 @@ int GPIO_CORE::filter( uint16_t an ){
       if( an != last_an ){ lastDebounceTime = millis(); }
       else if( ( millis() - lastDebounceTime ) > db_delay ){
         if( an != sig ){
+          uint32_t t = millis();
+          last_duration_ms = t - last_change_ms;
+          last_change_ms  = t;
           Fall = an < sig;
           Rise = an > sig;
           Change = true;
+          last_sig = sig;
           sig = an;
           State = an;
         }
@@ -301,7 +305,11 @@ void GPIO_CORE::reset_analog( uint16_t _min, uint16_t _max, uint16_t _res, uint3
   AN_RES = _res;
   AN_HZ  = _HZ;
   setRange( SET_MIN, SET_MAX );
-  voltageRange( analog_to_voltage(SET_MIN_AN), analog_to_voltage(SET_MIN_AN));
+  voltageRange( analog_to_voltage(SET_MIN_AN), analog_to_voltage(SET_MAX_AN));
+  
+  Serial.printf( "AN RANGE: %d to %d\n", AN_MIN, AN_MAX );
+  //Serial.printf( "AN RANGE: %d to %d\n", AN_MIN, AN_MAX );
+
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -313,6 +321,7 @@ void GPIO_CORE::setRange(float _min, float _max){
     SET_MAX = _max;
     SET_MIN_AN = (SET_MIN/1000.0)*(AN_MAX-AN_MIN)+AN_MIN;
     SET_MAX_AN = (SET_MAX/1000.0)*(AN_MAX-AN_MIN)+AN_MIN;
+    Serial.printf( "NEW AN RANGE: %d to %d\n", SET_MIN_AN, SET_MAX_AN );
   }
 }
 // Pensar sobre AN_MAX ou SET_MAX_AN ...
@@ -331,8 +340,8 @@ void  GPIO_CORE::setVoltageCoef(float _a, float _b){ if(_a!=0){ a_V = _a; b_V = 
 ///////////////////////////////////////////////////////  PWM  ///////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-uint32_t GPIO_CORE::frequency(  uint32_t F_HZ ){ if(OUT){ pwm_setup( F_HZ,AN_RES); Serial.print("F_HZ: "); Serial.println(AN_HZ ); return AN_HZ;  } }
-uint8_t  GPIO_CORE::resolution( uint8_t  RES  ){ if(OUT){ pwm_setup(AN_HZ,   RES); Serial.print("RES: " ); Serial.println(AN_RES); return AN_RES; } }
+uint32_t GPIO_CORE::frequency(  uint32_t F_HZ ){ if(OUT){ pwm_setup( F_HZ,AN_RES); Serial.print("F_HZ: "); Serial.println(AN_HZ );  } return AN_HZ;  }
+uint8_t  GPIO_CORE::resolution( uint8_t  RES  ){ if(OUT){ pwm_setup(AN_HZ,   RES); Serial.print("RES: " ); Serial.println(AN_RES);  } return AN_RES; }
 uint32_t GPIO_CORE::frequency(){  return AN_HZ;  }
 uint8_t  GPIO_CORE::resolution(){ return AN_RES; }
 
@@ -386,6 +395,10 @@ uint8_t GPIO_CORE :: pwm_setup(uint32_t F_HZ, uint8_t RES){
   AN_RES = 0;
   uint32_t a = (analogScale + 1) >> 1;
   while( a ){ a = a >> 1; AN_RES++; }
+
+  Serial.printf( "SCALE: %d\n", analogScale );
+  Serial.printf( "RESOLUTION: %d\n", AN_RES );
+
   reset_analog( 0, analogScale, AN_RES, analogFreq );
   return 1 | (AN_HZ == F_HZ) << 1 | (AN_RES == RES) << 2 ;
   #else
@@ -403,7 +416,7 @@ uint8_t GPIO_CORE :: pwm_setup(uint32_t F_HZ, uint8_t RES){
 uint8_t GPIO_CORE::update(){
   if( OUT ){
     uint8_t p = player.update();
-    if( p >= PLAYER_UPDATE && wave > 0 ){
+    if( ((p - PLAYER_UPDATE) >= 0) && (wave > 0) ){
            if( wave <= 2 ) write( player.value(),        1    ); // Blink and Blink_n
       else if( wave <= 5 ) write( player.value(),        1000 ); // Triangular, Sawtooth and square
       else if( wave <= 7 ) write( player.value(), -1000, 1000 ); // sin and cos
@@ -418,13 +431,14 @@ uint8_t GPIO_CORE::update(){
 }
 
 // Play functions  ==========================================
-void GPIO_CORE::play_blink(   uint16_t _T_ms ){ wave = 1; player.play_blink(_T_ms);   }
+void GPIO_CORE::play_off( ){ wave = 0; player.stop(); }
+void GPIO_CORE::play_blink(   uint32_t _T_ms ){ wave = 1; player.play_blink(_T_ms);   }
 void GPIO_CORE::play_blink_n( uint8_t n, uint16_t _dt ){ wave = 2; player.play_blink_n(n,_dt); }
-void GPIO_CORE::play_square(uint16_t _T_ms, uint16_t dutycicle){ wave = 3; player.play_square(_T_ms, dutycicle); }
-void GPIO_CORE::play_triangular( uint16_t _T_ms, uint16_t phase_i ){ wave = 4; player.play_triangular(_T_ms,phase_i); }
-void GPIO_CORE::play_sawtooth(   uint16_t _T_ms, uint16_t phase_i ){ wave = 5; player.play_sawtooth(_T_ms,phase_i);   }
-void GPIO_CORE::play_sin( uint16_t _T_ms, uint16_t phase_deg ){ wave = 6; player.play_sin(_T_ms, phase_deg); }
-void GPIO_CORE::play_cos( uint16_t _T_ms, uint16_t phase_deg ){ wave = 7; player.play_cos(_T_ms, phase_deg); }
+void GPIO_CORE::play_square(uint32_t _T_ms, uint16_t dutycicle){ wave = 3; player.play_square(_T_ms, dutycicle); }
+void GPIO_CORE::play_triangular( uint32_t _T_ms, uint16_t phase_i ){ wave = 4; player.play_triangular(_T_ms,phase_i); }
+void GPIO_CORE::play_sawtooth(   uint32_t _T_ms, uint16_t phase_i ){ wave = 5; player.play_sawtooth(_T_ms,phase_i);   }
+void GPIO_CORE::play_sin( uint32_t _T_ms, uint16_t phase_deg ){ wave = 6; player.play_sin(_T_ms, phase_deg); }
+void GPIO_CORE::play_cos( uint32_t _T_ms, uint16_t phase_deg ){ wave = 7; player.play_cos(_T_ms, phase_deg); }
 
 // Blink with delay  ========================================
 void GPIO_CORE::blink(int n, int dt){
@@ -471,6 +485,19 @@ void GPIO_CORE::print_conf(){
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////  INTERRUPT  ///////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+boolean GPIO_CORE::is_off_for( uint32_t dt ){ return is_state_for(dt,0); }
+boolean GPIO_CORE::is_on_for(  uint32_t dt ){ return is_state_for(dt,1); }
+boolean GPIO_CORE::is_state_for( uint32_t dt, uint16_t _state ){ if( sig == _state ) return ( (millis()-last_change_ms) > dt ); return false; }
+
+
+boolean GPIO_CORE::was_off_for( uint32_t dt ){ return was_state_for(dt,0); }
+boolean GPIO_CORE::was_on_for(  uint32_t dt ){ return was_state_for(dt,1); }
+boolean GPIO_CORE::was_state_for( uint32_t dt, uint16_t _state ){ if( last_sig == _state ) return ( last_duration_ms > dt ); return false; }
+
+//boolean is_on();
+//boolean is_off();
+uint32_t GPIO_CORE::lastChange_ms(){   return last_change_ms;   }
+uint32_t GPIO_CORE::lastDuration_ms(){ return last_duration_ms; }
 
 boolean GPIO_CORE::state(){ return State;  }
 //boolean GPIO_CORE::isOn  () { return  state(); }

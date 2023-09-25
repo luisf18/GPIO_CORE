@@ -147,6 +147,10 @@ class GPIO_CORE{
     uint16_t db_delay = 50;
     uint16_t db_states = 0;
     uint32_t lastDebounceTime = 0;
+    uint32_t last_change_ms = 0;
+
+    uint32_t last_duration_ms = 0;
+    uint32_t last_sig         = 0;
 
 
   public:
@@ -224,13 +228,14 @@ class GPIO_CORE{
     uint16_t handle_player(uint16_t i, uint16_t r);
 
     // Play functions  ============================================
-    void play_blink(   uint16_t _T_ms );
+    void play_off();
+    void play_blink(      uint32_t _T_ms );
     void play_blink_n( uint8_t n, uint16_t _dt );
-    void play_square(uint16_t _T_ms, uint16_t dutycicle);
-    void play_triangular( uint16_t _T_ms, uint16_t phase_i );
-    void play_sawtooth(   uint16_t _T_ms, uint16_t phase_i );
-    void play_sin( uint16_t _T_ms, uint16_t phase_deg );
-    void play_cos( uint16_t _T_ms, uint16_t phase_deg );
+    void play_square(     uint32_t _T_ms, uint16_t dutycicle);
+    void play_triangular( uint32_t _T_ms, uint16_t phase_i );
+    void play_sawtooth(   uint32_t _T_ms, uint16_t phase_i );
+    void play_sin( uint32_t _T_ms, uint16_t phase_deg );
+    void play_cos( uint32_t _T_ms, uint16_t phase_deg );
 
     // Effects with delay =========================================
     void blink(int n, int dt);
@@ -240,6 +245,16 @@ class GPIO_CORE{
     void print_conf();
 
     // INTERRUPT ==================================================
+    boolean is_on_for( uint32_t dt );
+    boolean is_off_for( uint32_t dt );
+    boolean is_state_for( uint32_t dt, uint16_t _state );
+    boolean was_off_for( uint32_t dt );
+    boolean was_on_for(  uint32_t dt );
+    boolean was_state_for( uint32_t dt, uint16_t _state );
+    //boolean is_on();
+    //boolean is_off();
+    uint32_t lastChange_ms();
+    uint32_t lastDuration_ms();
     boolean  state ();
     //boolean isOn  ();
     //boolean isOff ();

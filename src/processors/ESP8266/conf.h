@@ -9,8 +9,8 @@
 // PWM
 #define GPIO_CORE_PWM_COUNT      10 // ?? 
 #define GPIO_CORE_PWM_HZ         1000 
-#define GPIO_CORE_PWM_RES        10    // resolution
-#define GPIO_CORE_PWM_MAX        1023
+#define GPIO_CORE_PWM_RES        8    // resolution
+#define GPIO_CORE_PWM_MAX        255
 #define GPIO_CORE_PWM_MAX_RES    10 // ??
 
 // ADC
