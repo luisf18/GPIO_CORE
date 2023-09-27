@@ -89,7 +89,7 @@ boolean GPIO_CORE::begin(){
     
     switch (Tech){
       case GPIO_OUT__DIG       :  break;
-      case GPIO_OUT__PWM       : OK = pwm_setup(); reset_analog(0,GPIO_CORE_PWM_MAX,GPIO_CORE_PWM_RES,0); break;
+      case GPIO_OUT__PWM       : OK = pwm_setup(); reset_analog(0,GPIO_CORE_PWM_MAX,GPIO_CORE_PWM_RES,GPIO_CORE_PWM_RES); break;
       case GPIO_OUT__PWM_MOTOR : OK = pwm_setup(25000,10); break;
       case GPIO_OUT__PWM_SERVO : OK = pwm_setup(100,10); setRange(/*35*/40,258); break;
       case GPIO_OUT__DAC       :  break;
@@ -300,14 +300,26 @@ void GPIO_CORE::filter_debounce(uint16_t _db_delay, uint16_t _db_states){ An_Fil
 /////////////////////////////////////////////////////  ANALOG  //////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void GPIO_CORE::reset_analog( uint16_t _min, uint16_t _max, uint16_t _res, uint32_t _HZ ){
+
+  Serial.println("EUUU");
+  
   AN_MIN = _min;
   AN_MAX = _max;
   AN_RES = _res;
-  AN_HZ  = _HZ;
+  AN_HZ  = ( _HZ > 0 ? _HZ : GPIO_CORE_PWM_HZ );
+
   setRange( SET_MIN, SET_MAX );
+
+  Serial.println("1");
+
   voltageRange( analog_to_voltage(SET_MIN_AN), analog_to_voltage(SET_MAX_AN));
+
+  Serial.println("2");
   
   Serial.printf( "AN RANGE: %d to %d\n", AN_MIN, AN_MAX );
+
+  Serial.println("3");
+
   //Serial.printf( "AN RANGE: %d to %d\n", AN_MIN, AN_MAX );
 
 }
@@ -316,6 +328,7 @@ void GPIO_CORE::reset_analog( uint16_t _min, uint16_t _max, uint16_t _res, uint3
 /////////////////////////////////////////////////////  RANGE  ///////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void GPIO_CORE::setRange(float _min, float _max){
+  Serial.println("SET RANGE");
   if( _max > _min ){
     SET_MIN = _min;
     SET_MAX = _max;
@@ -323,6 +336,7 @@ void GPIO_CORE::setRange(float _min, float _max){
     SET_MAX_AN = (SET_MAX/1000.0)*(AN_MAX-AN_MIN)+AN_MIN;
     Serial.printf( "NEW AN RANGE: %d to %d\n", SET_MIN_AN, SET_MAX_AN );
   }
+  Serial.println("SET RANGE end");
 }
 // Pensar sobre AN_MAX ou SET_MAX_AN ...
 void  GPIO_CORE::setVoltageRange(float Vmin, float Vmax){
@@ -331,7 +345,11 @@ void  GPIO_CORE::setVoltageRange(float Vmin, float Vmax){
     (1000.0/(float)(AN_MAX-AN_MIN))*((Vmax-b_V)/a_V - AN_MIN)
   );
 }
-void  GPIO_CORE::voltageRange(float Vmin, float Vmax){ setVoltageCoef((Vmax-Vmin)/(AN_MAX-AN_MIN),Vmin); }
+void  GPIO_CORE::voltageRange(float Vmin, float Vmax){
+  Serial.println( "VOLTAGE RANGE" );
+  setVoltageCoef((Vmax-Vmin)/(AN_MAX-AN_MIN),Vmin);
+  Serial.println( "VOLTAGE RANGE END" );
+}
 void  GPIO_CORE::setVoltageCoef(float _a, float _b){ if(_a!=0){ a_V = _a; b_V = _b; } }
 
 //void GPIO_CORE::setBrightness(uint16_t _brightness){ brightness = _brightness; }
@@ -377,6 +395,8 @@ void GPIO_CORE::ESP32_pwm_channel(uint8_t ch){ PWM_CH = ch; ledc_channel_assigne
 #endif
 
 uint8_t GPIO_CORE :: pwm_setup(uint32_t F_HZ, uint8_t RES){
+
+  Serial.println( "TO AQUI" );
   
   #if defined(ESP32)
   if( RES > GPIO_CORE_PWM_MAX_RES ) return 0;
@@ -389,22 +409,52 @@ uint8_t GPIO_CORE :: pwm_setup(uint32_t F_HZ, uint8_t RES){
   return 1 | (AN_HZ == F_HZ) << 1 | (AN_RES == RES) << 2 ;
 
   #elif defined(ESP8266)
-  analogWriteFreq(F_HZ);
-  analogWriteResolution(RES);
-  // AN_MAX -> RES
-  AN_RES = 0;
-  uint32_t a = (analogScale + 1) >> 1;
-  while( a ){ a = a >> 1; AN_RES++; }
+  
+  Serial.println( "SIM é um esp8266" );
+  
+  // update resolution
+  if( (RES >= 4) && (RES <= 16) )
+      AN_RES = RES;
+  analogWriteResolution(AN_RES);
+  
+  Serial.print( "1 -> RES:" );
+  Serial.println( RES );
+      
+  // update range
+    AN_MAX = (1 << AN_RES) - 1;
+  Serial.println( "2" );
 
-  Serial.printf( "SCALE: %d\n", analogScale );
-  Serial.printf( "RESOLUTION: %d\n", AN_RES );
+  // update freq
+  if( F_HZ >= 100 &&  F_HZ <= 60000) AN_HZ = F_HZ;
+
+  Serial.print( "3 -> F " );
+  Serial.println( AN_HZ );
+  analogWriteFreq(AN_HZ);
+  
+  Serial.println( "4" );
+
+  // analogWriteFreq(F_HZ);
+  // analogWriteResolution(RES);
+
+  Serial.printf( "PWM: [ Range: 0 to %d ] [ %d bits / %d Hz ]\n",AN_MAX, AN_RES, AN_HZ );
+  
+  // AN_MAX -> RES
+  // AN_RES = 0;
+  // uint32_t a = (analogScale + 1) >> 1;
+  // while( a ){ a = a >> 1; AN_RES++; }
+
+  // Serial.printf( "SCALE: %d\n", analogScale );
+  // Serial.printf( "RESOLUTION: %d\n", AN_RES );
+
+  delay(200);
 
   reset_analog( 0, analogScale, AN_RES, analogFreq );
-  return 1 | (AN_HZ == F_HZ) << 1 | (AN_RES == RES) << 2 ;
+  return ( 1 | (AN_HZ == F_HZ) << 1 | (AN_RES == RES) << 2 ) ;
   #else
   
-  return 0;
   #endif
+
+  return 0;
 }
 
 
